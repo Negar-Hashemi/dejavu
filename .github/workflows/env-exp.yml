@@ -2,37 +2,50 @@ name: Test on Multiple OS
 
 on:
   push:
-    branches:
-      - dev
+    branches: [dev]
   pull_request:
-    branches:
-      - dev
+    branches: [dev]
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest] # Operating systems to test
-        node-version: [18, 20, 22]                      # Node.js versions to test
-        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9,10]         # Repeat tests 10 times
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [18, 20, 22]
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
+      # If you have an .nvmrc, this will use it; otherwise uses the matrix value
       - name: Set up Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          node-version-file: '.nvmrc'
+          cache: 'npm'
 
-      - name: Install dependencies
-        run: npm install
+      # Optional: keep installs quieter and deterministic in CI
+      - name: Configure npm for CI
+        run: |
+          npm config set fund false
+          npm config set audit false
+          npm config set progress false
 
-      - name: Testing on OS (${{ matrix.os }}) with Node.js (version ${{ matrix.node-version }}) attempt ${{ matrix.attempt }}
+      # The key change: bypass peer dep conflicts just for CI
+      - name: Install dependencies (CI)
+        run: npm ci --legacy-peer-deps
+
+      # Quick visibility when ESLint peer deps act up
+      - name: Debug ESLint resolution
+        run: |
+          npx eslint -v || true
+          npm ls --depth=1 eslint eslint-config-airbnb eslint-plugin-import eslint-plugin-react eslint-plugin-jsx-a11y || true
+
+      - name: Testing on OS (${{ matrix.os }}) with Node.js (v${{ matrix.node-version }}) attempt ${{ matrix.attempt }}
         run: |
           echo "Run attempt: ${{ matrix.attempt }}"
           npm test
-    continue-on-error: false
